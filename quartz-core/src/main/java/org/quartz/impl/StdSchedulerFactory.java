@@ -213,6 +213,8 @@ public class StdSchedulerFactory implements SchedulerFactory {
     public static final String PROP_DATASOURCE_PREFIX = "org.quartz.dataSource";
 
     public static final String PROP_CONNECTION_PROVIDER_CLASS = "connectionProvider.class";
+    
+    public static final String PROP_JOB_RUN_SHELL_FACTORY_CLASS = "org.quartz.scheduler.jobRunShellFactory.class";
 
     /**
      * @deprecated Replaced with {@link PoolingConnectionProvider#DB_DRIVER}
@@ -1220,25 +1222,38 @@ public class StdSchedulerFactory implements SchedulerFactory {
             log.info("Using default implementation for ThreadExecutor");
             threadExecutor = new DefaultThreadExecutor();
         }
+        
+        /*
+         * Setup Job Shell Factory.
+         */
+        JobRunShellFactory jrsf = null; // Create correct run-shell factory...
+        
+        if (userTXLocation != null) {
+            UserTransactionHelper.setUserTxLocation(userTXLocation);
+        }
 
+        if (wrapJobInTx) {
+            jrsf = new JTAJobRunShellFactory();
+        } else {
+            jrsf = new JTAAnnotationAwareJobRunShellFactory();
+        }
+        String jobRunShellFactoryClass = cfg.getStringProperty(PROP_JOB_RUN_SHELL_FACTORY_CLASS);
+        if(jobRunShellFactoryClass != null) {
+            try {
+				jrsf = (JobRunShellFactory) loadHelper.loadClass(jobRunShellFactoryClass).newInstance();
+			} catch (Exception e) {
+				initException = new SchedulerException(
+                        "JobRunShellFactory class '" + jobRunShellFactoryClass + "' could not be instantiated.", e);
+                throw initException;
+			} 
+            log.info("Using custom implementation for JobRunShellFactory: " + jobRunShellFactoryClass);
+        }
+        
 
 
         // Fire everything up
         // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         try {
-                
-    
-            JobRunShellFactory jrsf = null; // Create correct run-shell factory...
-    
-            if (userTXLocation != null) {
-                UserTransactionHelper.setUserTxLocation(userTXLocation);
-            }
-    
-            if (wrapJobInTx) {
-                jrsf = new JTAJobRunShellFactory();
-            } else {
-                jrsf = new JTAAnnotationAwareJobRunShellFactory();
-            }
     
             if (autoId) {
                 try {
